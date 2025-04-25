@@ -2,7 +2,7 @@ import pandas as pd
 import csv
 
 # Task 1: Restrict dataset to Oct–Nov 2019
-# Load TweetsCOV19.tsv
+# Load TweetsCOV19.tsv file
 try:
     data = pd.read_csv(
         "TweetsCOV19.tsv",
