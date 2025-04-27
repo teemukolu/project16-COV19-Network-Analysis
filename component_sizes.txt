@@ -1,0 +1,3 @@
+1th Largest Component: 728 nodes
+2th Largest Component: 19 nodes
+3th Largest Component: 16 nodes
