@@ -5,57 +5,58 @@ from collections import defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Task 1: Restrict dataset to Oct–Nov 2019
-# Load TweetsCOV19.tsv file
-try:
-    data = pd.read_csv(
-        "TweetsCOV19.tsv",
-        sep="\t",
-        low_memory=False,
-        on_bad_lines="skip",  # Skip lines with extra fields
-        quoting=csv.QUOTE_NONE,  # Avoid quote issues
-        names=[
-            "Tweet Id", "Username", "Timestamp", "#Followers", "#Friends",
-            "#Retweets", "#Favorites", "Entities", "Sentiment", "Mentions",
-            "Hashtags", "URLs"
-        ],  # Column names from description
-        header=None  # No header row
-    )
-except FileNotFoundError:
-    print("Error: TweetsCOV19.tsv not found")
-    exit()
-except Exception as e:
-    print(f"Error reading file: {e}")
-    exit()
+# MUN LISÄÄMÄT KOMMENTIT
+# # Task 1: Restrict dataset to Oct–Nov 2019
+# # Load TweetsCOV19.tsv file
+# try:
+#     data = pd.read_csv(
+#         "TweetsCOV19.tsv",
+#         sep="\t",
+#         low_memory=False,
+#         on_bad_lines="skip",  # Skip lines with extra fields
+#         quoting=csv.QUOTE_NONE,  # Avoid quote issues
+#         names=[
+#             "Tweet Id", "Username", "Timestamp", "#Followers", "#Friends",
+#             "#Retweets", "#Favorites", "Entities", "Sentiment", "Mentions",
+#             "Hashtags", "URLs"
+#         ],  # Column names from description
+#         header=None  # No header row
+#     )
+# except FileNotFoundError:
+#     print("Error: TweetsCOV19.tsv not found")
+#     exit()
+# except Exception as e:
+#     print(f"Error reading file: {e}")
+#     exit()
 
-# Help print few rows to verify
-print("Sample data (first 5 rows):")
-print(data[["Tweet Id", "Timestamp"]].head(5))
+# # Help print few rows to verify
+# print("Sample data (first 5 rows):")
+# print(data[["Tweet Id", "Timestamp"]].head(5))
 
-# Check date range
-timestamp_col = "Timestamp"
-print("\nDataset date range:")
-print(f"Min Timestamp: {data[timestamp_col].min()}")
-print(f"Max Timestamp: {data[timestamp_col].max()}")
+# # Check date range
+# timestamp_col = "Timestamp"
+# print("\nDataset date range:")
+# print(f"Min Timestamp: {data[timestamp_col].min()}")
+# print(f"Max Timestamp: {data[timestamp_col].max()}")
 
-# Convert timestamp to datetime with specific format
-data[timestamp_col] = pd.to_datetime(
-    data[timestamp_col],
-    format="%a %b %d %H:%M:%S %z %Y",
-    errors="coerce"
-)
+# # Convert timestamp to datetime with specific format
+# data[timestamp_col] = pd.to_datetime(
+#     data[timestamp_col],
+#     format="%a %b %d %H:%M:%S %z %Y",
+#     errors="coerce"
+# )
 
-# Filter to Oct–Nov 2019
-start_date = "2019-10-01"
-end_date = "2019-11-30"
-filtered_data = data[(data[timestamp_col] >= start_date) & (data[timestamp_col] <= end_date)]
+# # Filter to Oct–Nov 2019
+# start_date = "2019-10-01"
+# end_date = "2019-11-30"
+# filtered_data = data[(data[timestamp_col] >= start_date) & (data[timestamp_col] <= end_date)]
 
-# Drop rows with invalid timestamps
-filtered_data = filtered_data.dropna(subset=[timestamp_col])
+# # Drop rows with invalid timestamps
+# filtered_data = filtered_data.dropna(subset=[timestamp_col])
 
-# Save filtered dataset
-filtered_data.to_csv("filtered_tweets_oct_nov_2019.csv", index=False)
-print(f"Task 1 Complete: Saved {len(filtered_data)} tweets to filtered_tweets_oct_nov_2019.csv")
+# # Save filtered dataset
+# filtered_data.to_csv("filtered_tweets_oct_nov_2019.csv", index=False)
+# print(f"Task 1 Complete: Saved {len(filtered_data)} tweets to filtered_tweets_oct_nov_2019.csv")
 
 # Task 2: Construct hashtag-based network and compute metrics
 # Load filtered dataset from Task 1
@@ -132,10 +133,12 @@ metrics["Edges"] = G.number_of_edges()
 # Average path length (for largest component)
 largest_component = max(nx.connected_components(G), key=len, default=set())
 largest_subgraph = G.subgraph(largest_component)
-if len(largest_subgraph) > 1:
-    metrics["Avg Path Length"] = nx.average_shortest_path_length(largest_subgraph)
-else:
-    metrics["Avg Path Length"] = np.nan
+
+# MUN LISÄÄMÄT KOMMENTIT
+# if len(largest_subgraph) > 1:
+#     metrics["Avg Path Length"] = nx.average_shortest_path_length(largest_subgraph)
+# else:
+metrics["Avg Path Length"] = np.nan
 
 # Degree centrality
 degree_centrality = nx.degree_centrality(G)
@@ -200,3 +203,87 @@ plt.savefig("cumulative_degree_centrality_distribution.png")
 plt.close()
 print("Task 4: Saved cumulative degree centrality distribution to cumulative_degree_centrality_distribution.png")
 
+# Task 6: Time slicing the network
+# Create 10 time slices
+time_slices = np.array_split(data, 10)
+
+# List for metrics 
+subgraph_metrics = []
+
+# Plot
+fig, axes = plt.subplots(5, 2, figsize=(15, 20))
+axes = axes.flatten()
+
+for i, slice_df in enumerate(time_slices):
+    # ID s from slice
+    slice_ids = set(slice_df['Tweet Id'])
+
+    # Subgraph
+    subgraph = G.subgraph(slice_ids).copy()
+
+    # Metrics calculation
+    num_nodes = subgraph.number_of_nodes()
+    num_edges = subgraph.number_of_edges()
+    diameter = nx.diameter(subgraph) if nx.is_connected(subgraph) and num_nodes > 1 else np.nan
+    avg_path_lenght = nx.average_shortest_path_length(subgraph) if nx.is_connected(subgraph) and num_nodes > 1 else np.nan
+
+    subgraph_metrics.append({
+        "Time slice": i + 1,
+        "Nodes": num_nodes,
+        "Edges": num_edges,
+        "Diameter": diameter,
+        "Avg path length": avg_path_lenght
+    })
+
+    # Draw subgraph
+    pos = nx.spring_layout(subgraph, seed=42)
+    nx.draw(subgraph, pos, node_size=10, ax=axes[i])
+    axes[i].set_title(f"Slice {i + 1} ({num_nodes} nodes)")
+
+plt.tight_layout()
+plt.savefig("subgraphs_over_time.png")
+plt.close()
+print("Task 6: Saved subgraphs vizualization to subgraphs_over_time.png")
+
+# Save global metrics table 
+metrics_df = pd.DataFrame(subgraph_metrics)
+metrics_df.to_csv("time_slice_metrics.cvs", index=False)
+print("Task 6: Saved time slice metrics to time_slice_metrics.csv")
+
+# Task 7: Triangle scores and evolution of triangles overtime 
+triangle_counts = []
+
+for i, slice_df in enumerate(time_slices):
+    # Tweet ids
+    tweet_ids = set(slice_df['Tweet Id'])
+
+    # Subgraph
+    subgraph = G.subgraph(tweet_ids).copy()
+
+    # Count triangles 
+    triangle_dic = nx.triangles(subgraph)
+    total_triangles = sum(triangle_dic.values()) // 3
+
+    triangle_counts.append({
+        "Time slice": i + 1,
+        "Triangles": total_triangles
+    })
+
+    print(f"Slice {i + 1}: {len(tweet_ids)} tweet IDs → {subgraph.number_of_nodes()} nodes → {total_triangles} triangles")
+
+# Save triangle data
+triangle_df = pd.DataFrame(triangle_counts)
+triangle_df.to_csv("triangle_evolution.csv", index=False )
+print("Task 7: Saved triangle counts to triangle_evolution.csv")
+
+# Plot triangle evolution 
+plt.figure(figsize=(10, 6))
+plt.plot(triangle_df["Time slice"], triangle_df["Triangles"], marker='o', linestyle='-')
+plt.title("Triangle count over time")
+plt.xlabel("Time slice")
+plt.ylabel("Number of triangles")
+plt.grid(True, alpha=0.3)
+plt.xticks(range(1, 11))
+plt.savefig("triangle_evolution_over_time.png")
+plt.close()
+print("Task 7: Saves plot to triangle_evolution_over_time.png")
