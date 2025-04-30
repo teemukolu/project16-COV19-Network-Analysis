@@ -4,8 +4,15 @@ import networkx as nx
 from collections import defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
+import ndlib.models.ModelConfig as mc
+from ndlib.models.epidemics.SISModel import SISModel
 
-# MUN LISÄÄMÄT KOMMENTIT
+# ===============================
+# Task 1: Dataset filtering 
+# This section is slow and only needed once.
+# Necessary files already exist, skip this unless reprocessing.
+# ===============================
+
 # # Task 1: Restrict dataset to Oct–Nov 2019
 # # Load TweetsCOV19.tsv file
 # try:
@@ -134,7 +141,9 @@ metrics["Edges"] = G.number_of_edges()
 largest_component = max(nx.connected_components(G), key=len, default=set())
 largest_subgraph = G.subgraph(largest_component)
 
-# MUN LISÄÄMÄT KOMMENTIT
+# ===============================
+# This section is slow and only needed once.
+# ===============================
 # if len(largest_subgraph) > 1:
 #     metrics["Avg Path Length"] = nx.average_shortest_path_length(largest_subgraph)
 # else:
@@ -287,3 +296,87 @@ plt.xticks(range(1, 11))
 plt.savefig("triangle_evolution_over_time.png")
 plt.close()
 print("Task 7: Saves plot to triangle_evolution_over_time.png")
+
+# Task 8: Sentiment evolution over time
+sentiment_scores = []
+
+for i, slice_df in enumerate(time_slices):
+    pos_values = []
+    neg_values = []
+
+    for raw in slice_df["Sentiment"].dropna():
+        try:
+            parts = raw.strip().split()
+            if len(parts) == 2:
+                pos = float(parts[0])
+                neg = float(parts[1])
+                pos_values.append(pos)
+                neg_values.append(neg) 
+        except:
+            continue
+
+    avg_pos = np.mean(pos_values) if pos_values else 0.0
+    avg_neg = np.mean(neg_values) if neg_values else 0.0
+
+    sentiment_scores.append({
+        "Time slice": i + 1,
+        "Avg positive": avg_pos,
+        "Avg negative": avg_neg
+    })        
+
+    print(f"Slice {i + 1}: Avg positive = {avg_pos:.4f}, Avg negative = {avg_neg:.4f}")
+
+# Save sentiment data
+sentiment_df = pd.DataFrame(sentiment_scores)
+sentiment_df.to_csv("sentiment_evolution.cvs", index=False)
+print("Task 8: Saved sentiment ecolution data to sentiment_evolution.cvs")
+
+# Plot sentiment evolution
+plt.figure(figsize=(10, 6))
+plt.plot(sentiment_df["Time slice"], sentiment_df["Avg positive"], label='Positive', marker='o', color='green')
+plt.plot(sentiment_df["Time slice"], sentiment_df["Avg negative"], label='Negative', marker='o', color='red')
+plt.title("Sentiment evolution over time")
+plt.xlabel("Time slice")
+plt.ylabel("Average sentiment score")
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.xticks(range(1, 11))
+plt.ylim(-2, 2)
+plt.savefig("sentiment_evolution_over_time.png")
+plt.close()
+print("Task 8: Saved sentiment plot to sentiment_evolution_over_time.png")
+
+# Task 9: Negative sentiment spread
+tweet_ids = set(time_slices[0]["Tweet Id"])
+subgraph = G.subgraph(tweet_ids).copy()
+
+# Initialize SIS model
+model = SISModel(subgraph)
+
+# Configuration
+# Selected simulation 5: beta = 0.03  lambda = 0.02 
+# because this simulation best matches findings in Task 8
+config = mc.Configuration()
+config.add_model_parameter("beta", 0.03) # Infection chance percent
+config.add_model_parameter("lambda", 0.01) # Recovery chance
+config.add_model_parameter("fraction_infected", 0.05) # Start with 5 percent of infected
+model.set_initial_status(config)
+
+# Stimulate spread of infection
+iterations = model.iteration_bunch(10)
+infected_counts = [it["node_count"][1] for it in iterations]
+
+# print and plot the results
+print("Stimulated infected users per time slice:")
+print(infected_counts)
+
+plt.plot(range(1, 11), infected_counts, marker='o')
+plt.title("Stimulated infected users per time slice")
+plt.xlabel("Time slice")
+plt.ylabel("Simulated negative users (infected nodes)")
+plt.grid(True, alpha=0.3)
+plt.savefig("task9_sis_simulation.png")
+plt.close()
+
+
+
