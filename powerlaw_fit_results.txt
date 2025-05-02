@@ -1,0 +1,6 @@
+Power-law Fit Results
+Alpha: 1.925
+Xmin: 32.000
+R-squared: 0.970
+Data points above xmin: 2234
+Fit strength: Strong fit
