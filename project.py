@@ -214,7 +214,26 @@ print("Task 4: Saved cumulative degree centrality distribution to cumulative_deg
 
 # Task 6: Time slicing the network
 # Create 10 time slices
-time_slices = np.array_split(data, 10)
+data["Timestamp"] = pd.to_datetime(data["Timestamp"], errors='coerce')
+
+# Drop invalid
+data = data.dropna(subset=["Timestamp"])
+
+# Sort data chronologically
+data = data.sort_values(by="Timestamp")
+
+# Start and end times
+start_time = data["Timestamp"].min()
+end_time = data["Timestamp"].max()
+
+# Create 10 time bins
+time_bins = pd.date_range(start=start_time, end=end_time, periods=11)
+
+# Slice data by time ranges
+time_slices = []
+for i in range(10):
+    slice_df = data[(data["Timestamp"] >= time_bins[i]) & (data["Timestamp"] < time_bins[i+1])]
+    time_slices.append(slice_df)
 
 # List for metrics 
 subgraph_metrics = []
