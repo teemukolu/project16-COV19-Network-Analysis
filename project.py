@@ -6,64 +6,61 @@ import numpy as np
 import matplotlib.pyplot as plt
 import ndlib.models.ModelConfig as mc
 from ndlib.models.epidemics.SISModel import SISModel
+from itertools import combinations
+import powerlaw
+from scipy.stats import linregress
 
-# ===============================
-# Task 1: Dataset filtering 
-# This section is slow and only needed once.
-# Necessary files already exist, skip this unless reprocessing.
-# ===============================
+# Task 1: Restrict dataset to Oct–Nov 2019
+# Load TweetsCOV19.tsv file
+try:
+    data = pd.read_csv(
+        "TweetsCOV19.tsv",
+        sep="\t",
+        low_memory=False,
+        on_bad_lines="skip",  # Skip lines with extra fields
+        quoting=csv.QUOTE_NONE,  # Avoid quote issues
+        names=[
+            "Tweet Id", "Username", "Timestamp", "#Followers", "#Friends",
+            "#Retweets", "#Favorites", "Entities", "Sentiment", "Mentions",
+            "Hashtags", "URLs"
+        ],  # Column names from description
+        header=None  # No header row
+    )
+except FileNotFoundError:
+    print("Error: TweetsCOV19.tsv not found")
+    exit()
+except Exception as e:
+    print(f"Error reading file: {e}")
+    exit()
 
-# # Task 1: Restrict dataset to Oct–Nov 2019
-# # Load TweetsCOV19.tsv file
-# try:
-#     data = pd.read_csv(
-#         "TweetsCOV19.tsv",
-#         sep="\t",
-#         low_memory=False,
-#         on_bad_lines="skip",  # Skip lines with extra fields
-#         quoting=csv.QUOTE_NONE,  # Avoid quote issues
-#         names=[
-#             "Tweet Id", "Username", "Timestamp", "#Followers", "#Friends",
-#             "#Retweets", "#Favorites", "Entities", "Sentiment", "Mentions",
-#             "Hashtags", "URLs"
-#         ],  # Column names from description
-#         header=None  # No header row
-#     )
-# except FileNotFoundError:
-#     print("Error: TweetsCOV19.tsv not found")
-#     exit()
-# except Exception as e:
-#     print(f"Error reading file: {e}")
-#     exit()
+# Help print few rows to verify
+print("Sample data (first 5 rows):")
+print(data[["Tweet Id", "Timestamp"]].head(5))
 
-# # Help print few rows to verify
-# print("Sample data (first 5 rows):")
-# print(data[["Tweet Id", "Timestamp"]].head(5))
+# Check date range
+timestamp_col = "Timestamp"
+print("\nDataset date range:")
+print(f"Min Timestamp: {data[timestamp_col].min()}")
+print(f"Max Timestamp: {data[timestamp_col].max()}")
 
-# # Check date range
-# timestamp_col = "Timestamp"
-# print("\nDataset date range:")
-# print(f"Min Timestamp: {data[timestamp_col].min()}")
-# print(f"Max Timestamp: {data[timestamp_col].max()}")
+# Convert timestamp to datetime with specific format
+data[timestamp_col] = pd.to_datetime(
+    data[timestamp_col],
+    format="%a %b %d %H:%M:%S %z %Y",
+    errors="coerce"
+)
 
-# # Convert timestamp to datetime with specific format
-# data[timestamp_col] = pd.to_datetime(
-#     data[timestamp_col],
-#     format="%a %b %d %H:%M:%S %z %Y",
-#     errors="coerce"
-# )
+# Filter to Oct–Nov 2019
+start_date = "2019-10-01"
+end_date = "2019-11-30"
+filtered_data = data[(data[timestamp_col] >= start_date) & (data[timestamp_col] <= end_date)]
 
-# # Filter to Oct–Nov 2019
-# start_date = "2019-10-01"
-# end_date = "2019-11-30"
-# filtered_data = data[(data[timestamp_col] >= start_date) & (data[timestamp_col] <= end_date)]
+# Drop rows with invalid timestamps
+filtered_data = filtered_data.dropna(subset=[timestamp_col])
 
-# # Drop rows with invalid timestamps
-# filtered_data = filtered_data.dropna(subset=[timestamp_col])
-
-# # Save filtered dataset
-# filtered_data.to_csv("filtered_tweets_oct_nov_2019.csv", index=False)
-# print(f"Task 1 Complete: Saved {len(filtered_data)} tweets to filtered_tweets_oct_nov_2019.csv")
+# Save filtered dataset
+filtered_data.to_csv("filtered_tweets_oct_nov_2019.csv", index=False)
+print(f"Task 1 Complete: Saved {len(filtered_data)} tweets to filtered_tweets_oct_nov_2019.csv")
 
 # Task 2: Construct hashtag-based network and compute metrics
 # Load filtered dataset from Task 1
@@ -85,7 +82,7 @@ print(data["Hashtags"].value_counts().head(20))
 print("\nSample non-null Hashtags (first 5):")
 print(data[data["Hashtags"] != "null;"]["Hashtags"].head(5))
 
-# Sample data to speed up (adjust sample_size as needed). Full dataset too big to process? Need to change something?
+# Sample data to speed up (adjust sample_size as needed). Full dataset too big to process (takes too long)? Need to change something?
 sample_size = 50000  # Change to 50000, 100000, or None (full dataset)
 if sample_size is not None:
     data = data.sample(n=sample_size, random_state=42)
@@ -115,13 +112,8 @@ for tweet_id, hashtags in tweet_hashtags.itertuples(index=False):
 
 # Add edges
 edge_list = []
-for hashtag, tweet_ids in hashtag_to_tweets.items():
-    # Generate edges for pairs of tweet_ids
-    for i in range(len(tweet_ids)):
-        for j in range(i + 1, len(tweet_ids)):
-            edge_list.append((tweet_ids[i], tweet_ids[j]))
-    if len(edge_list) % 10000 == 0:
-        print(f"Generated {len(edge_list)} edges...")
+for tweet_ids in hashtag_to_tweets.values():
+    edge_list.extend(combinations(tweet_ids, 2))
 
 # Add edges to graph
 G.add_edges_from(edge_list)
@@ -141,13 +133,10 @@ metrics["Edges"] = G.number_of_edges()
 largest_component = max(nx.connected_components(G), key=len, default=set())
 largest_subgraph = G.subgraph(largest_component)
 
-# ===============================
-# This section is slow and only needed once.
-# ===============================
-# if len(largest_subgraph) > 1:
-#     metrics["Avg Path Length"] = nx.average_shortest_path_length(largest_subgraph)
-# else:
-metrics["Avg Path Length"] = np.nan
+if len(largest_subgraph) > 1:
+    metrics["Avg Path Length"] = nx.average_shortest_path_length(largest_subgraph)
+else:
+    metrics["Avg Path Length"] = np.nan
 
 # Degree centrality
 degree_centrality = nx.degree_centrality(G)
@@ -399,3 +388,61 @@ plt.close()
 
 
 
+# Task 5: Test power-law fit for degree distribution
+try:
+    G = nx.read_gml("hashtag_network.gml")
+    print(f"Loaded graph with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+except FileNotFoundError:
+    print("Error: hashtag_network.gml not found. Run Task 2 first.")
+    exit()
+
+print("\nTask 5: Testing power-law fit for degree distribution")
+
+# Use raw degrees, exclude degree 0
+degrees = [degree for _, degree in G.degree() if degree > 0]
+data = np.array(degrees)
+
+if len(data) == 0:
+    print("Error: No nodes with degree > 0. Cannot fit power-law.")
+    exit()
+
+# Fit power-law distribution
+fit = powerlaw.Fit(data, discrete=True)
+alpha = fit.power_law.alpha
+xmin = fit.power_law.xmin
+print(f"Power-law fit: alpha = {alpha:.3f}, xmin = {xmin:.3f}")
+
+# Compute R-squared for degrees >= xmin
+data_above_xmin = data[data >= xmin]
+if len(data_above_xmin) < 10:
+    print("Warning: Too few data points above xmin for reliable R-squared.")
+    r_squared = 0.0
+else:
+    # Empirical CDF
+    sorted_data = np.sort(data_above_xmin)
+    n = len(sorted_data)
+    empirical_cdf = np.arange(1, n + 1) / n
+
+    # Fitted power-law CDF
+    fitted_cdf = fit.power_law.cdf(sorted_data)
+
+    # R-squared
+    ss_tot = np.sum((empirical_cdf - np.mean(empirical_cdf))**2)
+    ss_res = np.sum((empirical_cdf - fitted_cdf)**2)
+    r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+
+print(f"R-squared value: {r_squared:.3f}")
+
+# Assess fit strength
+fit_strength = "Weak fit" if r_squared < 0.5 else "Moderate fit" if r_squared < 0.8 else "Strong fit"
+print(f"Fit strength: {fit_strength}")
+
+# Save results
+with open("powerlaw_fit_results.txt", "w") as f:
+    f.write(f"Power-law Fit Results\n")
+    f.write(f"Alpha: {alpha:.3f}\n")
+    f.write(f"Xmin: {xmin:.3f}\n")
+    f.write(f"R-squared: {r_squared:.3f}\n")
+    f.write(f"Data points above xmin: {len(data_above_xmin)}\n")
+    f.write(f"Fit strength: {fit_strength}\n")
+print("Task 5: Saved power-law fit results to powerlaw_fit_results.txt")
